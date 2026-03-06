@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hide</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+
+<body>
+  <div id="hud"
+    style="position: absolute; top: 20px; left: 20px; color: #ffbf00; font-family: sans-serif; font-size: 24px; font-weight: bold; pointer-events: none; display: none; text-shadow: 2px 2px 0 #000;">
+    Loot: <span id="lootCount">0</span>
+  </div>
+  <div id="ui">
+    <div>
+      <h1>HIDE</h1>
+      <p>Click to Play</p>
+      <p style="font-size: 14px; opacity: 0.7; margin-top: 20px;">WASD to move, Mouse to look</p>
+    </div>
+  </div>
+  <div id="app">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
