@@ -44,6 +44,68 @@ camera.add(flashlight);
 camera.add(flashlight.target);
 scene.add(camera);
 
+// --- Procedural Textures ---
+function createWoodTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#8b5a2b';
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillStyle = '#6b4226';
+  for (let i = 0; i < 50; i++) {
+    ctx.beginPath();
+    ctx.moveTo(Math.random() * 256, 0);
+    ctx.lineTo(Math.random() * 256, 256);
+    ctx.lineWidth = Math.random() * 4 + 1;
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createFabricTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#223355';
+  ctx.fillRect(0, 0, 128, 128);
+  for (let x = 0; x < 128; x += 2) {
+    for (let y = 0; y < 128; y += 2) {
+      if (Math.random() > 0.5) {
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        ctx.fillRect(x, y, 2, 2);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillRect(x, y, 2, 2);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createStaticTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  for (let x = 0; x < 64; x++) {
+    for (let y = 0; y < 64; y++) {
+      const v = Math.floor(Math.random() * 255);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+const woodTex = createWoodTexture();
+const fabricTex = createFabricTexture();
+const staticTex = createStaticTexture();
+
 // --- Level Management System ---
 let currentLevel = 1;
 const collidables = [];
@@ -105,7 +167,7 @@ function buildLevel(levelNum) {
 
   // Fence material & geometry
   const fencePillarGeo = new THREE.BoxGeometry(0.3, 1.8, 0.1);
-  const fenceMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+  const fenceMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.9 });
   function createFence(x, z, rotate = false) {
     const p = new THREE.Mesh(fencePillarGeo, fenceMat);
     p.position.set(x, 0.9, z);
@@ -126,9 +188,17 @@ function buildLevel(levelNum) {
   }
 
   if (levelNum === 1) {
-    const houseMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
-    const innerWallMat = new THREE.MeshLambertMaterial({ color: 0xddddcc });
-    const houseFloorMat = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
+    const houseMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 1.0 });
+    const innerWallMat = new THREE.MeshStandardMaterial({ color: 0xddddcc, roughness: 0.8 });
+
+    // Shiny hardwood floor
+    const houseFloorMat = new THREE.MeshStandardMaterial({
+      map: woodTex,
+      color: 0xaaaaaa, // Tint the wood slightly lighter
+      roughness: 0.2, // Shiny
+      metalness: 0.1
+    });
+
     const hY = 4;
     const hW = 15;
     const hD = 12;
@@ -139,10 +209,13 @@ function buildLevel(levelNum) {
     inFloor.rotation.x = -Math.PI / 2;
     inFloor.position.set(0, 0.01, hZ);
     inFloor.receiveShadow = true;
+
+    // Repeat texture to make it look like floorboards instead of one giant stretched plank
+    woodTex.repeat.set(4, 4);
     addLvl(inFloor);
 
     const roofGeo = new THREE.BoxGeometry(hW + 1, 1, hD + 1);
-    const roofMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
     const roof = new THREE.Mesh(roofGeo, roofMat);
     roof.position.set(0, 8.5, hZ);
     roof.castShadow = true;
@@ -165,9 +238,10 @@ function buildLevel(levelNum) {
     createWall(-2, hZ, 0.5, 8, true);
     createWall(3, hZ - 2, 6, 0.5, true);
 
-    const furnMat = new THREE.MeshLambertMaterial({ color: 0x553322 });
-    const couchMat = new THREE.MeshLambertMaterial({ color: 0x223355 });
-    const tvMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+    const furnMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
+    const couchMat = new THREE.MeshStandardMaterial({ map: fabricTex, roughness: 1.0 });
+    const tvMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 }); // Shiny plastic TV
+    const screenMat = new THREE.MeshBasicMaterial({ map: staticTex }); // Unlit bright static
 
     const counter = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 2), furnMat);
     counter.position.set(4, 1.5, hZ - 4);
@@ -175,11 +249,32 @@ function buildLevel(levelNum) {
     counter.receiveShadow = true;
     addLvl(counter, true);
 
-    const tvDisplay = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.5, 4), tvMat);
-    tvDisplay.position.set(-6, 3, hZ);
-    tvDisplay.castShadow = true;
-    tvDisplay.receiveShadow = true;
-    addLvl(tvDisplay, true);
+    const tvBody = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.5, 4), tvMat);
+    tvBody.position.set(-6, 3, hZ);
+    tvBody.castShadow = true;
+    tvBody.receiveShadow = true;
+    addLvl(tvBody, true);
+
+    const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.1), screenMat);
+    tvScreen.position.set(-5.74, 3, hZ);
+    tvScreen.rotation.y = Math.PI / 2; // Face outward from wall
+    addLvl(tvScreen);
+
+    // Living Room Area Rug
+    const rugGeo = new THREE.PlaneGeometry(6, 6);
+    const rugMat = new THREE.MeshStandardMaterial({ color: 0x882222, roughness: 1.0, map: fabricTex });
+    const rug = new THREE.Mesh(rugGeo, rugMat);
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(-3, 0.02, hZ);
+    addLvl(rug);
+
+    // Coffee table
+    const tableGeo = new THREE.BoxGeometry(2, 1, 3);
+    const table = new THREE.Mesh(tableGeo, furnMat);
+    table.position.set(-1.5, 0.5, hZ);
+    table.castShadow = true;
+    table.receiveShadow = true;
+    addLvl(table, true);
 
     const couch = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 4), couchMat);
     couch.position.set(-3.5, 1, hZ);
@@ -187,8 +282,14 @@ function buildLevel(levelNum) {
     couch.receiveShadow = true;
     addLvl(couch, true);
 
-    const lootGeo = new THREE.SphereGeometry(0.3, 8, 8);
-    const lootMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+    const lootGeo = new THREE.SphereGeometry(0.3, 16, 16);
+    // Physically Based Reflective Gold!
+    const lootMat = new THREE.MeshStandardMaterial({
+      color: 0xffcc00,
+      metalness: 1.0,
+      roughness: 0.2, // Very shiny
+      emissive: 0x332200 // Slight glow so it's never pitch black
+    });
 
     function createLoot(x, y, z) {
       const loot = new THREE.Mesh(lootGeo, lootMat);
@@ -199,7 +300,7 @@ function buildLevel(levelNum) {
     }
 
     createLoot(4, 3.5, hZ - 4);
-    createLoot(-2, 1, hZ - 4);
+    createLoot(-1.5, 1.3, hZ); // On Coffee Table
     createLoot(-6, 1, hZ + 4);
 
     const livingRoomLight = new THREE.PointLight(0xffaa55, 1.5, 15);
