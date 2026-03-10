@@ -82,7 +82,8 @@ Ensure the `package.json` includes the standard workflow commands:
 ```
 
 ### 4. Running the Dev Server
-Use `npm run dev`. This spins up a fast local web server that supports hot-module replacement (HMR), making local testing lightning fast.
+- Use `npm run watch` - Automatically monitor files and rebuild dist/index.html upon any changes.
+- Or (perhaps) use `npm run dev`. This spins up a fast local web server that supports hot-module replacement (HMR), making local testing lightning fast.
 
 ### 5. Writing Tests
 Put game logic into pure functions that can be tested independently of the Canvas/DOM. Keep test files in `test/` or alongside logic files (`logic.test.js`). Run tests using `npm test`.
