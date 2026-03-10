@@ -117,10 +117,12 @@ let npcVision = null;
 let patrolPoints = [];
 let currentPatrolIndex = 0;
 let npcState = 'PATROL';
-const npcSpeed = 2.0;
-const npcChaseSpeed = 4.5;
+let chaseTimeout = 0;
+let npcSpeed = 2.0;
+let npcChaseSpeed = 4.5;
 const levelObjects = [];
 const yardSize = 15;
+let interactiveDoors = [];
 
 function clearLevel() {
   levelObjects.forEach(obj => {
@@ -138,11 +140,18 @@ function clearLevel() {
   totalLoot = 0;
   document.getElementById('lootCount').innerText = `0 / 0`;
 
+  interactiveDoors.length = 0;
+
   if (npc) {
     scene.remove(npc);
     if (npcVision && npcVision.target) scene.remove(npcVision.target);
-    if (npc.geometry) npc.geometry.dispose();
-    if (npc.material) npc.material.dispose();
+    npc.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    });
     npc = null;
   }
 }
@@ -156,6 +165,14 @@ function addLvl(obj, isCollidable = false) {
 function buildLevel(levelNum) {
   clearLevel();
   currentLevel = levelNum;
+
+  if (levelNum === 1) {
+    npcSpeed = 0.8;
+    npcChaseSpeed = 1.8; // Slower than player speed
+  } else {
+    npcSpeed = 2.0;
+    npcChaseSpeed = 4.5;
+  }
 
   // Persistent yard base
   const floorGeo = new THREE.PlaneGeometry(60, 60);
@@ -234,11 +251,44 @@ function buildLevel(levelNum) {
     createWall(-hW / 2, hZ, 0.5, hD);
     createWall(hW / 2, hZ, 0.5, hD);
     createWall(-4.5, hZ + hD / 2, 6, 0.5);
-    createWall(4.5, hZ + hD / 2, 6, 0.5);
+
+    // Front Right Wall w/ Window
+    function createWallExt(x, y, z, width, height, depth) {
+      const geo = new THREE.BoxGeometry(width, height, depth);
+      const mesh = new THREE.Mesh(geo, houseMat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      addLvl(mesh, true);
+    }
+    createWallExt(2.5, hY, hZ + hD / 2, 2, 8, 0.5); // left side
+    createWallExt(6.5, hY, hZ + hD / 2, 2, 8, 0.5); // right side
+    createWallExt(4.5, 0.5, hZ + hD / 2, 2, 1, 0.5); // bottom
+    createWallExt(4.5, 5.0, hZ + hD / 2, 2, 6, 0.5); // top
+
+    // Window Glass (collidable so NPC raycaster hits it)
+    const glassGeo = new THREE.BoxGeometry(2, 2, 0.1);
+    const glassMat = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.3 });
+    const glass = new THREE.Mesh(glassGeo, glassMat);
+    glass.position.set(4.5, 2.0, hZ + hD / 2);
+    addLvl(glass, true);
     createWall(-2, hZ, 0.5, 8, true);
     createWall(3, hZ - 2, 6, 0.5, true);
 
     const furnMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
+
+    // Door
+    const doorContainer = new THREE.Group();
+    doorContainer.position.set(-1.5, hY, hZ + hD / 2);
+    const doorGeo = new THREE.BoxGeometry(3, 8, 0.4);
+    const doorMesh = new THREE.Mesh(doorGeo, furnMat);
+    doorMesh.position.set(1.5, 0, 0);
+    doorMesh.castShadow = true;
+    doorMesh.receiveShadow = true;
+    doorContainer.add(doorMesh);
+    addLvl(doorContainer, false); // Door collision disabled to prevent getting stuck when it swings open
+    interactiveDoors.push(doorContainer);
+
     const couchMat = new THREE.MeshStandardMaterial({ map: fabricTex, roughness: 1.0 });
     const tvMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 }); // Shiny plastic TV
     const screenMat = new THREE.MeshBasicMaterial({ map: staticTex }); // Unlit bright static
@@ -299,9 +349,9 @@ function buildLevel(levelNum) {
       totalLoot++;
     }
 
-    createLoot(4, 3.5, hZ - 4);
+    createLoot(4, 1.5, hZ - 2); // In Kitchen, lowered and moved back so it's reachable
     createLoot(-1.5, 1.3, hZ); // On Coffee Table
-    createLoot(-6, 1, hZ + 4);
+    // Removed 3rd loot for Level 1
 
     const livingRoomLight = new THREE.PointLight(0xffaa55, 1.5, 15);
     livingRoomLight.position.set(-4, 3, hZ);
@@ -331,13 +381,46 @@ function buildLevel(levelNum) {
       addLvl(leaves);
     });
 
-    // NPC Setup
-    const npcGeo = new THREE.BoxGeometry(0.8, 2.0, 0.8);
-    const npcMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-    npc = new THREE.Mesh(npcGeo, npcMat);
+    // NPC Setup (Humanoid)
+    npc = new THREE.Group();
     npc.position.set(-5, 1.0, hZ);
-    npc.castShadow = true;
-    npc.receiveShadow = true;
+
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+    const shirtMat = new THREE.MeshLambertMaterial({ color: 0xaa2222 });
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x2222aa });
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
+    head.position.set(0, 0.85, 0);
+    head.castShadow = true;
+    npc.add(head);
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.4), shirtMat);
+    torso.position.set(0, 0.1, 0);
+    torso.castShadow = true;
+    npc.add(torso);
+
+    const legGeo = new THREE.BoxGeometry(0.35, 0.8, 0.35);
+    const leftLeg = new THREE.Mesh(legGeo, pantsMat);
+    leftLeg.position.set(-0.2, -0.6, 0);
+    leftLeg.castShadow = true;
+    npc.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(legGeo, pantsMat);
+    rightLeg.position.set(0.2, -0.6, 0);
+    rightLeg.castShadow = true;
+    npc.add(rightLeg);
+
+    const armGeo = new THREE.BoxGeometry(0.25, 0.9, 0.25);
+    const leftArm = new THREE.Mesh(armGeo, shirtMat);
+    leftArm.position.set(-0.55, 0.15, 0);
+    leftArm.castShadow = true;
+    npc.add(leftArm);
+
+    const rightArm = new THREE.Mesh(armGeo, shirtMat);
+    rightArm.position.set(0.55, 0.15, 0);
+    rightArm.castShadow = true;
+    npc.add(rightArm);
+
     scene.add(npc);
 
     npcVision = new THREE.SpotLight(0xff0000, 2.0, 15, Math.PI / 4, 0.5, 1);
@@ -346,14 +429,230 @@ function buildLevel(levelNum) {
     scene.add(npcVision.target);
 
     patrolPoints = [
-      new THREE.Vector3(-5, 1.0, hZ),
-      new THREE.Vector3(-5, 1.0, hZ + 5),
-      new THREE.Vector3(-1, 1.0, hZ + 5),
-      new THREE.Vector3(-1, 1.0, hZ),
-      new THREE.Vector3(3.5, 1.0, hZ)
+      new THREE.Vector3(-5, 1.0, 0),         // Front left (Living room)
+      new THREE.Vector3(-5, 1.0, hZ - 4),    // Back left (Living room)
+      new THREE.Vector3(0, 1.0, hZ - 4),     // Back center (Hallway)
+      new THREE.Vector3(5, 1.0, hZ - 4),     // Back right (Kitchen)
+      new THREE.Vector3(5, 1.0, 0),          // Front right (Kitchen entrance)
+      new THREE.Vector3(0, 1.0, 0)           // Center (Front door)
     ];
     currentPatrolIndex = 0;
     npcState = 'PATROL';
+  } else if (levelNum === 2) {
+    // --- LEVEL 2: The Warehouse ---
+    const houseMat = new THREE.MeshStandardMaterial({ color: 0x444455, roughness: 0.9 });
+    const innerWallMat = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 1.0 });
+
+    // Concrete floor
+    const concreteTex = createStaticTexture(); // Reusing noise for concrete look
+    concreteTex.repeat.set(10, 10);
+    const houseFloorMat = new THREE.MeshStandardMaterial({
+      map: concreteTex,
+      color: 0x666666,
+      roughness: 0.8
+    });
+
+    const hY = 4;
+    const hW = 20;
+    const hD = 16;
+    const hZ = -2;
+
+    const inFloorGeo = new THREE.PlaneGeometry(hW - 0.5, hD - 0.5);
+    const inFloor = new THREE.Mesh(inFloorGeo, houseFloorMat);
+    inFloor.rotation.x = -Math.PI / 2;
+    inFloor.position.set(0, 0.01, hZ);
+    inFloor.receiveShadow = true;
+    addLvl(inFloor);
+
+    // Roof
+    const roofGeo = new THREE.BoxGeometry(hW + 1, 1, hD + 1);
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.set(0, 8.5, hZ);
+    roof.castShadow = true;
+    addLvl(roof);
+
+    function createWall(x, z, width, depth, isInner = false) {
+      const geo = new THREE.BoxGeometry(width, 8, depth);
+      const mesh = new THREE.Mesh(geo, isInner ? innerWallMat : houseMat);
+      mesh.position.set(x, hY, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      addLvl(mesh, true);
+    }
+
+    // Outer walls
+    createWall(0, hZ - hD / 2, hW, 0.5); // Back
+    createWall(-hW / 2, hZ, 0.5, hD);    // Left
+    createWall(hW / 2, hZ, 0.5, hD);     // Right
+
+    // Front Left Wall w/ Window
+    function createWallExtL2(x, y, z, width, height, depth) {
+      const geo = new THREE.BoxGeometry(width, height, depth);
+      const mesh = new THREE.Mesh(geo, houseMat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      addLvl(mesh, true);
+    }
+    createWallExtL2(-8.5, hY, hZ + hD / 2, 3, 8, 0.5); // left side
+    createWallExtL2(-3.5, hY, hZ + hD / 2, 3, 8, 0.5); // right side
+    createWallExtL2(-6, 0.5, hZ + hD / 2, 2, 1, 0.5);  // bottom
+    createWallExtL2(-6, 5.0, hZ + hD / 2, 2, 6, 0.5);  // top
+
+    // Window Glass
+    const glassGeo2 = new THREE.BoxGeometry(2, 2, 0.1);
+    const glassMat2 = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.3 });
+    const glass2 = new THREE.Mesh(glassGeo2, glassMat2);
+    glass2.position.set(-6, 2.0, hZ + hD / 2);
+    addLvl(glass2, true);
+
+    createWall(6, hZ + hD / 2, 8, 0.5);  // Front right
+
+    // Warehouse Crates
+    const crateMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.8 });
+    function createCrate(x, y, z, size) {
+      const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMat);
+      crate.position.set(x, y, z);
+      crate.castShadow = true;
+      crate.receiveShadow = true;
+      addLvl(crate, true);
+    }
+
+    // Stack 1
+    createCrate(-4, 1.5, -4, 3);
+    createCrate(-4, 4.5, -4, 3);
+
+    // Stack 2
+    createCrate(4, 1, -6, 2);
+    createCrate(4, 3, -6, 2);
+    createCrate(6, 1, -6, 2);
+
+    // Obstacle Wall
+    createWall(0, hZ, 10, 0.5, true);
+
+    // Level 2 Furniture (Couch and TV)
+    const couchMat2 = new THREE.MeshStandardMaterial({ map: fabricTex, roughness: 1.0 });
+    const tvMat2 = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 });
+    const screenMat2 = new THREE.MeshBasicMaterial({ map: staticTex });
+
+    // Couch
+    const couch2 = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 4), couchMat2);
+    couch2.position.set(4, 1, -8); // Placed in the back right
+    couch2.castShadow = true;
+    couch2.receiveShadow = true;
+    addLvl(couch2, false); // Non-collidable so NPC doesn't trap himself inside during CHASE
+
+    // TV setup
+    const tvBody2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.5, 4), tvMat2);
+    tvBody2.position.set(8, 3, -8); // On the right wall
+    tvBody2.castShadow = true;
+    tvBody2.receiveShadow = true;
+    addLvl(tvBody2, true);
+
+    const tvScreen2 = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.1), screenMat2);
+    tvScreen2.position.set(7.74, 3, -8);
+    tvScreen2.rotation.y = -Math.PI / 2; // Face inward towards couch
+    addLvl(tvScreen2);
+
+    // Loot setup
+    const lootGeo = new THREE.SphereGeometry(0.3, 16, 16);
+    const lootMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, metalness: 1.0, roughness: 0.2, emissive: 0x332200 });
+
+    function createLoot(x, y, z) {
+      const loot = new THREE.Mesh(lootGeo, lootMat);
+      loot.position.set(x, y, z);
+      addLvl(loot);
+      lootItems.push({ mesh: loot, collected: false });
+      totalLoot++;
+    }
+
+    createLoot(-2, 0.5, -4);  // Moved next to crates so it's visible on the floor
+    createLoot(6, 2.5, -6);   // On short crate
+    createLoot(-8, 0.5, hZ + hD / 2 - 2); // Hidden in front corner
+
+    // Lighting (spooky warehouse)
+    const light1 = new THREE.PointLight(0xaaddff, 1.8, 20);
+    light1.position.set(-5, 6, -5);
+    addLvl(light1);
+
+    const light2 = new THREE.PointLight(0xaaddff, 1.0, 15);
+    light2.position.set(5, 6, 2);
+    addLvl(light2);
+
+    // Door at entrance
+    const doorContainer = new THREE.Group();
+    doorContainer.position.set(-2, hY, hZ + hD / 2);
+    const doorGeo = new THREE.BoxGeometry(4, 8, 0.4);
+    const doorMesh = new THREE.Mesh(doorGeo, crateMat);
+    doorMesh.position.set(2, 0, 0);
+    doorMesh.castShadow = true;
+    doorMesh.receiveShadow = true;
+    doorContainer.add(doorMesh);
+    addLvl(doorContainer, false); // Door collision disabled to prevent getting stuck when it swings open
+    interactiveDoors.push(doorContainer);
+
+    // NPC Setup (Humanoid - Fatter)
+    npc = new THREE.Group();
+    npc.position.set(4.5, 1.0, -8); // Sitting on couch
+
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+    const shirtMat = new THREE.MeshLambertMaterial({ color: 0x222222 }); // Dark shirt for level 2
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), skinMat);
+    head.position.set(0, 0.85, 0);
+    head.castShadow = true;
+    npc.add(head);
+
+    // Fatter torso
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.8), shirtMat);
+    torso.position.set(0, 0.1, 0);
+    torso.castShadow = true;
+    npc.add(torso);
+
+    const legGeo = new THREE.BoxGeometry(0.35, 0.8, 0.35);
+    const leftLeg = new THREE.Mesh(legGeo, pantsMat);
+    leftLeg.position.set(-0.25, -0.6, 0);
+    leftLeg.castShadow = true;
+    npc.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(legGeo, pantsMat);
+    rightLeg.position.set(0.25, -0.6, 0);
+    rightLeg.castShadow = true;
+    npc.add(rightLeg);
+
+    const armGeo = new THREE.BoxGeometry(0.25, 0.9, 0.25);
+    const leftArm = new THREE.Mesh(armGeo, shirtMat);
+    leftArm.position.set(-0.75, 0.15, 0);
+    leftArm.castShadow = true;
+    npc.add(leftArm);
+
+    const rightArm = new THREE.Mesh(armGeo, shirtMat);
+    rightArm.position.set(0.75, 0.15, 0);
+    rightArm.castShadow = true;
+    npc.add(rightArm);
+
+    scene.add(npc);
+
+    npcVision = new THREE.SpotLight(0xff0000, 2.0, 20, Math.PI / 4, 0.5, 1);
+    npcVision.position.set(0, 0.5, 0);
+    npc.add(npcVision);
+    scene.add(npcVision.target);
+
+    // Initial rotation looking at TV
+    npc.lookAt(new THREE.Vector3(8, 1.0, -8));
+
+    patrolPoints = [
+      new THREE.Vector3(4.5, 1.0, -8) // Doesn't move, just watches TV
+    ];
+    currentPatrolIndex = 0;
+    npcState = 'PATROL'; // Effectively idle
+
+    // Set level 2 speeds
+    npcSpeed = 0; // Very lazy
+    npcChaseSpeed = 3.5; 
+
   } else {
     // End of game
     const ui = document.getElementById('ui');
@@ -402,6 +701,8 @@ document.addEventListener('keydown', (event) => {
     case 'KeyA': moveState.left = true; break;
     case 'KeyS': moveState.backward = true; break;
     case 'KeyD': moveState.right = true; break;
+    case 'Digit1': if (event.shiftKey) buildLevel(1); break;
+    case 'Digit2': if (event.shiftKey) buildLevel(2); break;
   }
 });
 
@@ -499,6 +800,17 @@ function animate(time) {
     camera.getWorldDirection(dir);
     flashlight.target.position.copy(camera.position).add(dir.multiplyScalar(10));
 
+    // Update Interactive Doors
+    interactiveDoors.forEach(door => {
+      const doorCenter = new THREE.Vector3();
+      door.children[0].getWorldPosition(doorCenter);
+      if (camera.position.distanceTo(doorCenter) < 4.0) {
+        door.rotation.y = THREE.MathUtils.lerp(door.rotation.y, -Math.PI / 2, 0.05);
+      } else {
+        door.rotation.y = THREE.MathUtils.lerp(door.rotation.y, 0, 0.05);
+      }
+    });
+
     // Loot Detection
     lootItems.forEach(item => {
       if (!item.collected) {
@@ -581,6 +893,33 @@ function animate(time) {
         if (dist < 1.0) { // Caught!
           caughtPlayer();
         } else {
+          // Check Line of Sight during chase
+          raycaster.set(npc.position, new THREE.Vector3().subVectors(camera.position, npc.position).normalize());
+
+          // Get all meshes from doors
+          const doorMeshes = interactiveDoors.map(d => d.children[0]);
+          const sightBlockers = [...collidables, ...doorMeshes];
+
+          const intersects = raycaster.intersectObjects(sightBlockers);
+          let hasLineOfSight = true;
+          if (intersects.length > 0) {
+            if (intersects[0].distance < dist) {
+              hasLineOfSight = false; // Wall blocked view
+            }
+          }
+
+          if (!hasLineOfSight) {
+            chaseTimeout += delta;
+            if (chaseTimeout > 2.0) { // Lose interest after 2 seconds out of sight
+              npcState = 'PATROL';
+              npcVision.color.setHex(0xffffff); // Reset light
+              npcVision.intensity = 2.0;
+              chaseTimeout = 0;
+            }
+          } else {
+            chaseTimeout = 0; // Reset timeout if we see them
+          }
+
           npcDir.normalize();
           const moveDist = npcChaseSpeed * delta;
           const futurePos = npc.position.clone().add(npcDir.clone().multiplyScalar(moveDist));
@@ -635,18 +974,25 @@ function animate(time) {
       if (npcState === 'PATROL') {
         const toPlayer = new THREE.Vector3().subVectors(camera.position, npc.position);
         const distanceToPlayer = toPlayer.length();
+        const maxVision = currentLevel === 1 ? 8 : 15;
+        const visionCone = currentLevel === 1 ? Math.PI / 6 : Math.PI / 4;
 
-        if (distanceToPlayer < 15) { // Max vision distance
+        if (distanceToPlayer < maxVision) { // Max vision distance
           const npcForward = new THREE.Vector3(0, 0, 1).applyQuaternion(npc.quaternion).normalize();
           toPlayer.normalize();
 
           // Check if player is within the vision cone angle (e.g., 45 degrees)
           const angle = npcForward.angleTo(toPlayer);
-          if (angle < Math.PI / 4) {
+          if (angle < visionCone) {
             // Raycast to check for walls blocking the view
             raycaster.set(npc.position, toPlayer);
-            // Only check collision with walls/fences
-            const intersects = raycaster.intersectObjects(collidables);
+
+            // Get all meshes from doors
+            const doorMeshes = interactiveDoors.map(d => d.children[0]);
+            const sightBlockers = [...collidables, ...doorMeshes];
+
+            // Only check collision with walls/fences and doors
+            const intersects = raycaster.intersectObjects(sightBlockers);
 
             let hasLineOfSight = true;
             if (intersects.length > 0) {
@@ -658,6 +1004,7 @@ function animate(time) {
             if (hasLineOfSight) {
               // Spotted!
               npcState = 'CHASE';
+              chaseTimeout = 0;
               console.log("SPOTTED! Chasing player...");
               // Play a sound or change lighting for jump scare
             }
