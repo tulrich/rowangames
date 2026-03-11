@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build:maps": "node src/LevelParser.js",
+    "predev": "npm run build:maps",
+    "prebuild": "npm run build:maps",
     "dev": "vite",
     "build": "vite build",
     "watch": "vite build --watch",
@@ -12,7 +15,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
     "vite": "^7.3.1",
     "vite-plugin-singlefile": "^2.3.0",

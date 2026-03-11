@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import level3Data from './obj/level3.js';
 
 // 1. Initialization
 const canvas = document.getElementById('gameCanvas');
@@ -123,6 +124,7 @@ let npcChaseSpeed = 4.5;
 const levelObjects = [];
 const yardSize = 15;
 let interactiveDoors = [];
+let securityCameras = [];
 
 function clearLevel() {
   levelObjects.forEach(obj => {
@@ -141,6 +143,7 @@ function clearLevel() {
   document.getElementById('lootCount').innerText = `0 / 0`;
 
   interactiveDoors.length = 0;
+  securityCameras.length = 0;
 
   if (npc) {
     scene.remove(npc);
@@ -653,6 +656,216 @@ function buildLevel(levelNum) {
     npcSpeed = 0; // Very lazy
     npcChaseSpeed = 3.5; 
 
+  } else if (levelNum === 3) {
+    // Level 3: Conspiracist Bunker
+    npcSpeed = 3.5; // Fast patrol
+    npcChaseSpeed = 5.0; // Fast chase
+
+    const bunkerMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 1.0 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+
+    const hZ = 0;
+    const hY = 4;
+
+    // Entrance light (since player spawns outside in the dark)
+    const entranceLight = new THREE.PointLight(0xaaddff, 1.0, 15);
+    entranceLight.position.set(0, 5, 10);
+    addLvl(entranceLight);
+
+    // Ceiling
+    const ceilGeo = new THREE.BoxGeometry(16, 1, 16);
+    const ceil = new THREE.Mesh(ceilGeo, bunkerMat);
+    ceil.position.set(0, 8.5, hZ);
+    addLvl(ceil);
+
+    // Floor
+    const bunkerFloor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
+    bunkerFloor.rotation.x = -Math.PI / 2;
+    bunkerFloor.position.set(0, 0.01, hZ);
+    addLvl(bunkerFloor);
+
+    function createWallL3(x, z, width, depth) {
+      const geo = new THREE.BoxGeometry(width, 8, depth);
+      const mesh = new THREE.Mesh(geo, bunkerMat);
+      mesh.position.set(x, hY, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      addLvl(mesh, true);
+    }
+
+    function createWallExt(x, y, z, width, height, depth) {
+      const geo = new THREE.BoxGeometry(width, height, depth);
+      const mesh = new THREE.Mesh(geo, bunkerMat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      addLvl(mesh, true);
+    }
+
+    // Compute offsets to center the map
+    const offsetX = -(level3Data.width / 2);
+    const offsetZ = -(level3Data.height / 2) + hZ;
+
+    // Outer & Labyrinth Walls
+    for (const wall of level3Data.walls) {
+      createWallL3(wall.x + offsetX, wall.z + offsetZ, wall.width, wall.depth);
+    }
+
+    // Windows
+    const glassGeoX = new THREE.BoxGeometry(1, 2, 0.1);
+    const glassGeoZ = new THREE.BoxGeometry(0.1, 2, 2);
+    const glassMat = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.3 });
+    for (const win of level3Data.windows) {
+      const wx = win.x + offsetX;
+      const wz = win.z + offsetZ;
+      const mesh = new THREE.Mesh(win.isX ? glassGeoX : glassGeoZ, glassMat);
+      mesh.position.set(wx, 2.0, wz);
+      addLvl(mesh, true);
+      if (win.isX) {
+        createWallExt(wx, 0.5, wz, 1, 1, 0.5); // Bottom frame
+        createWallExt(wx, 5.0, wz, 1, 6, 0.5); // Top frame
+      } else {
+        createWallExt(wx, 0.5, wz, 0.5, 1, 2); // Bottom frame
+        createWallExt(wx, 5.0, wz, 0.5, 6, 2); // Top frame
+      }
+    }
+
+    // Doors
+    const furnMat = new THREE.MeshStandardMaterial({ color: 0x442211, roughness: 0.8 });
+    for (const door of level3Data.doors) {
+      const dx = door.x + offsetX;
+      const dz = door.z + offsetZ;
+      const doorContainer = new THREE.Group();
+
+      if (door.isX) {
+        doorContainer.position.set(dx - 0.5, hY, dz);
+        const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 8, 0.4), furnMat);
+        doorMesh.position.set(0.5, 0, 0);
+        doorMesh.castShadow = true; doorMesh.receiveShadow = true;
+        doorContainer.add(doorMesh);
+      } else {
+        doorContainer.position.set(dx, hY, dz - 1.0);
+        const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8, 2), furnMat);
+        doorMesh.position.set(0, 0, 1.0);
+        doorMesh.castShadow = true; doorMesh.receiveShadow = true;
+        doorContainer.add(doorMesh);
+      }
+
+      addLvl(doorContainer, false);
+      interactiveDoors.push(doorContainer);
+    }
+
+    // Loot
+    const lootGeo = new THREE.SphereGeometry(0.3, 16, 16);
+    const lootMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, metalness: 1.0, roughness: 0.2, emissive: 0x332200 });
+
+    function createLoot(x, y, z) {
+      const loot = new THREE.Mesh(lootGeo, lootMat);
+      loot.position.set(x, y, z);
+      addLvl(loot);
+      lootItems.push({ mesh: loot, collected: false });
+      totalLoot++;
+    }
+
+    for (const lootInfo of level3Data.loots) {
+      createLoot(lootInfo.x + offsetX, 0.5, lootInfo.z + offsetZ);
+    }
+
+    // Lighting (dim, red emergency lights)
+    const light1 = new THREE.PointLight(0xff5555, 1.0, 15);
+    light1.position.set(0, 6, hZ);
+    addLvl(light1);
+
+    const light2 = new THREE.PointLight(0xff5555, 1.0, 15);
+    light2.position.set(-6, 6, hZ - 6);
+    addLvl(light2);
+
+    // NPC Setup (Conspiracist)
+    npc = new THREE.Group();
+    const npcSpawn = level3Data.npcs[0];
+    const nx = npcSpawn ? (npcSpawn.x + offsetX) : 0;
+    const nz = npcSpawn ? (npcSpawn.z + offsetZ) : hZ;
+    npc.position.set(nx, 1.0, nz);
+
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+    const shirtMat = new THREE.MeshLambertMaterial({ color: 0x556633 }); // camo green
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
+    head.position.set(0, 0.85, 0);
+    head.castShadow = true;
+    npc.add(head);
+
+    // Tinfoil hat
+    const hatGeo = new THREE.ConeGeometry(0.35, 0.6, 4);
+    const hatMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 1.0, roughness: 0.1 });
+    const hat = new THREE.Mesh(hatGeo, hatMat);
+    hat.position.set(0, 1.3, 0);
+    hat.castShadow = true;
+    npc.add(hat);
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), shirtMat);
+    torso.position.set(0, 0.2, 0);
+    torso.castShadow = true;
+    npc.add(torso);
+
+    const legGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);
+    const leftLeg = new THREE.Mesh(legGeo, pantsMat);
+    leftLeg.position.set(-0.15, -0.6, 0);
+    leftLeg.castShadow = true;
+    npc.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(legGeo, pantsMat);
+    rightLeg.position.set(0.15, -0.6, 0);
+    rightLeg.castShadow = true;
+    npc.add(rightLeg);
+
+    scene.add(npc);
+
+    npcVision = new THREE.SpotLight(0xffffff, 2.0, 15, Math.PI / 4, 0.5, 1);
+    npcVision.position.set(0, 0.5, 0);
+    npc.add(npcVision);
+    scene.add(npcVision.target);
+
+    patrolPoints = level3Data.npcs.map(p => new THREE.Vector3(p.x + offsetX, 1.0, p.z + offsetZ));
+    if (patrolPoints.length === 0) patrolPoints.push(new THREE.Vector3(nx, 1.0, nz));
+    currentPatrolIndex = 0;
+    npcState = 'PATROL';
+
+    // Security Cameras
+    function createSecurityCamera(x, y, z, rotY) {
+      const camGroup = new THREE.Group();
+      camGroup.position.set(x, y, z);
+      camGroup.rotation.y = rotY;
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.6), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+      body.position.set(0, 0, 0.3); // Extrude forward
+      camGroup.add(body);
+
+      // Camera vision
+      const camVision = new THREE.SpotLight(0xffffff, 2.0, 20, Math.PI / 6, 0.5, 1);
+      camVision.position.set(0, 0, 0.6);
+      camVision.target.position.set(0, -3, 8); // Point downward heavily so it hits player height
+      camGroup.add(camVision);
+      camGroup.add(camVision.target);
+
+      addLvl(camGroup);
+
+      securityCameras.push({
+        group: camGroup,
+        vision: camVision,
+        baseRot: rotY,
+        timeOffset: Math.random() * Math.PI * 2
+      });
+    }
+
+    // Determine camera rotations based on location relative to center for now
+    for (const cam of level3Data.cameras) {
+      const cx = cam.x + offsetX;
+      const cz = cam.z + offsetZ;
+      const rot = (cz < hZ) ? 0 : Math.PI; // Look forward if in back half, back if in front half
+      createSecurityCamera(cx, 4, cz, rot);
+    }
+
   } else {
     // End of game
     const ui = document.getElementById('ui');
@@ -662,7 +875,14 @@ function buildLevel(levelNum) {
   }
 
   // Set player start
-  camera.position.set(0, 1.6, yardSize - 2);
+  if (levelNum === 3 && level3Data.start) {
+    const offsetX = -(level3Data.width / 2);
+    const offsetZ = -(level3Data.height / 2);
+    camera.position.set(level3Data.start.x + offsetX, 1.6, level3Data.start.z + offsetZ);
+  } else {
+    camera.position.set(0, 1.6, yardSize - 2);
+  }
+
   if (velocity) velocity.set(0, 0, 0);
 
   // Initial HUD
@@ -697,21 +917,30 @@ controls.addEventListener('unlock', () => {
 
 document.addEventListener('keydown', (event) => {
   switch (event.code) {
-    case 'KeyW': moveState.forward = true; break;
-    case 'KeyA': moveState.left = true; break;
-    case 'KeyS': moveState.backward = true; break;
-    case 'KeyD': moveState.right = true; break;
+    case 'KeyW':
+    case 'ArrowUp': moveState.forward = true; break;
+    case 'KeyA':
+    case 'ArrowLeft': moveState.left = true; break;
+    case 'KeyS':
+    case 'ArrowDown': moveState.backward = true; break;
+    case 'KeyD':
+    case 'ArrowRight': moveState.right = true; break;
     case 'Digit1': if (event.shiftKey) buildLevel(1); break;
     case 'Digit2': if (event.shiftKey) buildLevel(2); break;
+    case 'Digit3': if (event.shiftKey) buildLevel(3); break;
   }
 });
 
 document.addEventListener('keyup', (event) => {
   switch (event.code) {
-    case 'KeyW': moveState.forward = false; break;
-    case 'KeyA': moveState.left = false; break;
-    case 'KeyS': moveState.backward = false; break;
-    case 'KeyD': moveState.right = false; break;
+    case 'KeyW':
+    case 'ArrowUp': moveState.forward = false; break;
+    case 'KeyA':
+    case 'ArrowLeft': moveState.left = false; break;
+    case 'KeyS':
+    case 'ArrowDown': moveState.backward = false; break;
+    case 'KeyD':
+    case 'ArrowRight': moveState.right = false; break;
   }
 });
 
@@ -765,9 +994,12 @@ function animate(time) {
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     forward.y = 0; forward.normalize();
 
+    const moveRightVec = right.clone().multiplyScalar(dx);
+    const moveForwardVec = forward.clone().multiplyScalar(dz);
+    const totalMove = new THREE.Vector3().addVectors(moveRightVec, moveForwardVec);
+
     // Apply movement to futurePos
-    futurePos.add(right.multiplyScalar(dx));
-    futurePos.add(forward.multiplyScalar(dz));
+    futurePos.add(totalMove);
 
     // Construct player AABB at future position
     playerBox.setFromCenterAndSize(
@@ -787,18 +1019,41 @@ function animate(time) {
 
     // Only move if there is no collision
     if (!collided) {
-      controls.moveRight(dx);
-      controls.moveForward(dz);
+      camera.position.add(totalMove);
     } else {
-      // Kill velocity on hit
-      velocity.x = 0;
-      velocity.z = 0;
+      // SLIDE LOGIC: Try independent world axes
+      let collidedX = false;
+      let collidedZ = false;
+
+      // Try X
+      const futurePosX = camera.position.clone().add(new THREE.Vector3(totalMove.x, 0, 0));
+      playerBox.setFromCenterAndSize(new THREE.Vector3(futurePosX.x, 1.0, futurePosX.z), new THREE.Vector3(playerSize, 2.0, playerSize));
+      for (const obj of collidables) { objBox.setFromObject(obj); if (playerBox.intersectsBox(objBox)) { collidedX = true; break; } }
+
+      // Try Z
+      const futurePosZ = camera.position.clone().add(new THREE.Vector3(0, 0, totalMove.z));
+      playerBox.setFromCenterAndSize(new THREE.Vector3(futurePosZ.x, 1.0, futurePosZ.z), new THREE.Vector3(playerSize, 2.0, playerSize));
+      for (const obj of collidables) { objBox.setFromObject(obj); if (playerBox.intersectsBox(objBox)) { collidedZ = true; break; } }
+
+      if (!collidedX && !collidedZ) {
+        // Corner case: neither axis collides alone, but together they do (corner hit)
+        if (Math.abs(totalMove.x) > Math.abs(totalMove.z)) {
+          camera.position.x += totalMove.x;
+        } else {
+          camera.position.z += totalMove.z;
+        }
+      } else if (!collidedX) {
+        camera.position.x += totalMove.x;
+      } else if (!collidedZ) {
+        camera.position.z += totalMove.z;
+      } else {
+        // Both axes blocked
+        velocity.x = 0;
+        velocity.z = 0;
+      }
     }
 
-    // Keep the flashlight target pointing perfectly ahead of the camera in world space
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    flashlight.target.position.copy(camera.position).add(dir.multiplyScalar(10));
+    // Flashlight target is a child of the camera, so it naturally points forward at (0, 0, -1). No need to update its world position manually here.
 
     // Update Interactive Doors
     interactiveDoors.forEach(door => {
@@ -837,6 +1092,50 @@ function animate(time) {
         return; // Exit current frame
       }
     }
+
+    // Update Security Cameras
+    securityCameras.forEach(cam => {
+      // Sweep back and forth (~60 degree spread)
+      cam.group.rotation.y = cam.baseRot + Math.sin(time * 0.001 + cam.timeOffset) * 0.5;
+
+      // Ensure the vision target remains correctly offset from the sweep
+      const forward = new THREE.Vector3(0, -1, 1).applyQuaternion(cam.group.quaternion).normalize();
+      cam.vision.target.position.copy(cam.group.position).add(forward.multiplyScalar(5));
+
+      // Player Detection
+      const toPlayer = new THREE.Vector3().subVectors(camera.position, cam.group.position);
+      const distanceToPlayer = toPlayer.length();
+
+      if (distanceToPlayer < 15 && npcState !== 'CHASE') {
+        toPlayer.normalize();
+        const camForward = new THREE.Vector3(0, -1, 1).applyQuaternion(cam.group.quaternion).normalize();
+
+        // SpotLight angle is Math.PI/6, check within that cone
+        if (camForward.angleTo(toPlayer) < Math.PI / 6) {
+          raycaster.set(cam.group.position, toPlayer);
+
+          const doorMeshes = interactiveDoors.map(d => d.children[0]);
+          const sightBlockers = [...collidables, ...doorMeshes];
+          const intersects = raycaster.intersectObjects(sightBlockers);
+
+          let hasLineOfSight = true;
+          if (intersects.length > 0) {
+            if (intersects[0].distance < distanceToPlayer) {
+              hasLineOfSight = false; // Blocked
+            }
+          }
+
+          if (hasLineOfSight) {
+            // Camera spotted player! Alert NPC
+            console.log("CAMERA SPOTTED PLAYER!");
+            if (npc) {
+              npcState = 'CHASE';
+              chaseTimeout = 0;
+            }
+          }
+        }
+      }
+    });
 
     // Helper variables for NPC collision
     const npcBox = new THREE.Box3();
