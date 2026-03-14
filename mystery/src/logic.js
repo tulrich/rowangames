@@ -44,6 +44,7 @@ export function generateMystery() {
     const itemToPlace = name === targetBuildingName ? targetItem : getRandomItemExcluding(targetItem);
     placedItems.push({
       name: itemToPlace,
+      buildingName: name,
       x: bx + bw / 2 - 10,
       y: by + bh / 2 - 10,
       width: 20,
@@ -122,4 +123,13 @@ export function checkFoundItem(state) {
     }
   }
   return false;
+}
+
+export function isPlayerInBuilding(player, building) {
+  return (
+    player.x < building.x + building.width &&
+    player.x + player.width > building.x &&
+    player.y < building.y + building.height &&
+    player.y + player.height > building.y
+  );
 }

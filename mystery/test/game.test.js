@@ -41,4 +41,20 @@ describe('Game Logic', () => {
     expect(found).toBe(true);
     expect(state.gameOver).toBe(true);
   });
+
+  it('should detect when player is in building', () => {
+    const state = generateMystery();
+    const b = state.buildings[0];
+    
+    state.player.x = b.x + 10;
+    state.player.y = b.y + 10;
+    
+    const { isPlayerInBuilding } = require('../src/logic.js');
+    expect(isPlayerInBuilding(state.player, b)).toBe(true);
+    
+    state.player.x = 0;
+    state.player.y = 0;
+    expect(isPlayerInBuilding(state.player, b)).toBe(false);
+  });
 });
+

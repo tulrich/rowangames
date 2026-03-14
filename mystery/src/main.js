@@ -1,4 +1,4 @@
-import { generateMystery, movePlayer, checkFoundItem } from './logic.js';
+import { generateMystery, movePlayer, checkFoundItem, isPlayerInBuilding } from './logic.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -33,7 +33,7 @@ function init() {
 function startGame() {
   gameState = generateMystery();
   document.getElementById('hud').style.display = 'block';
-  document.getElementById('instructionText').innerText = `Mystery: Find the lost ${gameState.targetItem.toUpperCase()} in the ${gameState.targetBuildingName.toUpperCase()}!`;
+  document.getElementById('instructionText').innerText = `Mystery: Find the lost ${gameState.targetItem.toUpperCase()}!`;
   requestAnimationFrame(gameLoop);
 }
 
@@ -65,15 +65,18 @@ function draw() {
     ctx.fillText(b.name, b.x + 5, b.y + 20);
   });
 
-  // Draw items
+  // Draw items only if player is in the corresponding building
   gameState.items.forEach(i => {
-    ctx.fillStyle = i.isTarget ? '#ffaa00' : '#888'; 
-    ctx.fillRect(i.x, i.y, i.width, i.height);
-    
-    // Tiny label for item
-    ctx.fillStyle = '#fff';
-    ctx.font = '10px sans-serif';
-    ctx.fillText(i.name, i.x - 5, i.y - 5);
+    const b = gameState.buildings.find(bld => bld.name === i.buildingName);
+    if (b && isPlayerInBuilding(gameState.player, b)) {
+      ctx.fillStyle = i.isTarget ? '#ffaa00' : '#888'; 
+      ctx.fillRect(i.x, i.y, i.width, i.height);
+      
+      // Tiny label for item
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(i.name, i.x - 5, i.y - 5);
+    }
   });
 
   // Draw player
