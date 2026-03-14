@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mystery</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="ui">
+    <div>
+      <h1>MYSTERY</h1>
+      <p>Click to Play</p>
+    </div>
+  </div>
+  <div id="hud" style="display:none; position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; font-size: 24px; border-radius: 8px;">
+    <span id="instructionText">Find the hidden item!</span>
+  </div>
+  <div id="winModal" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.8); z-index: 200;">
+    <div style="text-align: center;">
+      <h2 style="font-size: 48px; color: #4CAF50;">You solved the mystery!</h2>
+      <button id="restartBtn" style="padding: 10px 20px; font-size: 24px; cursor: pointer; border-radius: 8px; border: none; background: #fff; color: #000; margin-top: 20px;">Play Again</button>
+    </div>
+  </div>
+  <div id="app">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

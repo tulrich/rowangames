@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mystery</title>
+  <script type="module" crossorigin>(function(){const e=document.createElement("link").relList;if(e&&e.supports&&e.supports("modulepreload"))return;for(const n of document.querySelectorAll('link[rel="modulepreload"]'))a(n);new MutationObserver(n=>{for(const o of n)if(o.type==="childList")for(const s of o.addedNodes)s.tagName==="LINK"&&s.rel==="modulepreload"&&a(s)}).observe(document,{childList:!0,subtree:!0});function i(n){const o={};return n.integrity&&(o.integrity=n.integrity),n.referrerPolicy&&(o.referrerPolicy=n.referrerPolicy),n.crossOrigin==="use-credentials"?o.credentials="include":n.crossOrigin==="anonymous"?o.credentials="omit":o.credentials="same-origin",o}function a(n){if(n.ep)return;n.ep=!0;const o=i(n);fetch(n.href,o)}})();const u=["sunglasses","camera","toy","tissue box","pillow","lego set","ipad","phone","TV","jacket","suitcase","bag","lamp"],h=["firetrucks","library","bakery","restaurant","grocery store","music class","toy store"];function L(){const t=u[Math.floor(Math.random()*u.length)],e=h[Math.floor(Math.random()*h.length)],i=[],a=[];return h.forEach((n,o)=>{const c=o%3,d=Math.floor(o/3),y=100+c*250+(Math.random()*50-25),g=100+d*200+(Math.random()*50-25),p=120,w=100;i.push({name:n,x:y,y:g,width:p,height:w,color:`hsl(${o*(360/h.length)}, 60%, 40%)`});const I=n===e?t:B(t);a.push({name:I,x:y+p/2-10,y:g+w/2-10,width:20,height:20,isTarget:n===e})}),{targetItem:t,targetBuildingName:e,buildings:i,items:a,player:{x:50,y:50,width:20,height:20,speed:5},gameOver:!1}}function B(t){let e;do e=u[Math.floor(Math.random()*u.length)];while(e===t);return e}function S(t,e){if(t.gameOver)return;const i=(e.KeyD||e.ArrowRight?1:0)-(e.KeyA||e.ArrowLeft?1:0),a=(e.KeyS||e.ArrowDown?1:0)-(e.KeyW||e.ArrowUp?1:0),n=Math.sqrt(i*i+a*a);let o=0,s=0;n>0&&(o=i/n*t.player.speed,s=a/n*t.player.speed);let c=t.player.x+o,d=t.player.y+s;c=Math.max(0,Math.min(c,1200-t.player.width)),d=Math.max(0,Math.min(d,900-t.player.height)),t.player.x=c,t.player.y=d}function O(t){if(t.gameOver)return!1;const e=t.player;for(const i of t.items)if(i.isTarget&&e.x<i.x+i.width&&e.x+e.width>i.x&&e.y<i.y+i.height&&e.y+e.height>i.y)return t.gameOver=!0,!0;return!1}const f=document.getElementById("gameCanvas"),r=f.getContext("2d");let l=null;const m={};function T(){window.addEventListener("resize",M),M();const t=document.getElementById("ui");t.addEventListener("click",()=>{t.style.display="none",x()}),document.getElementById("restartBtn").addEventListener("click",()=>{document.getElementById("winModal").style.display="none",x()}),window.addEventListener("keydown",e=>{m[e.code]=!0}),window.addEventListener("keyup",e=>{m[e.code]=!1})}function x(){l=L(),document.getElementById("hud").style.display="block",document.getElementById("instructionText").innerText=`Mystery: Find the lost ${l.targetItem.toUpperCase()} in the ${l.targetBuildingName.toUpperCase()}!`,requestAnimationFrame(E)}function M(){f.width=window.innerWidth,f.height=window.innerHeight,l&&v()}function v(){if(!r||!l)return;r.fillStyle="#111",r.fillRect(0,0,f.width,f.height),r.fillStyle="#333",r.fillRect(0,0,1200,900),l.buildings.forEach(e=>{r.fillStyle=e.color,r.fillRect(e.x,e.y,e.width,e.height),r.fillStyle="#fff",r.font="14px sans-serif",r.fillText(e.name,e.x+5,e.y+20)}),l.items.forEach(e=>{r.fillStyle=e.isTarget?"#ffaa00":"#888",r.fillRect(e.x,e.y,e.width,e.height),r.fillStyle="#fff",r.font="10px sans-serif",r.fillText(e.name,e.x-5,e.y-5)});const t=l.player;r.fillStyle="#00aaff",r.beginPath(),r.arc(t.x+t.width/2,t.y+t.height/2,t.width/2,0,Math.PI*2),r.fill()}function E(){if(l.gameOver){document.getElementById("winModal").style.display="flex";return}S(l,m),O(l),v(),requestAnimationFrame(E)}T();</script>
+  <style rel="stylesheet" crossorigin>html,body{margin:0;padding:0;overflow:hidden;background-color:#111;color:#fff;font-family:sans-serif}#app{width:100vw;height:100vh}canvas{display:block;width:100%;height:100%}#ui{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;background:#000000b3;z-index:100;text-align:center}#ui h1{font-size:48px;margin-bottom:10px}</style>
+</head>
+<body>
+  <div id="ui">
+    <div>
+      <h1>MYSTERY</h1>
+      <p>Click to Play</p>
+    </div>
+  </div>
+  <div id="hud" style="display:none; position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; font-size: 24px; border-radius: 8px;">
+    <span id="instructionText">Find the hidden item!</span>
+  </div>
+  <div id="winModal" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.8); z-index: 200;">
+    <div style="text-align: center;">
+      <h2 style="font-size: 48px; color: #4CAF50;">You solved the mystery!</h2>
+      <button id="restartBtn" style="padding: 10px 20px; font-size: 24px; cursor: pointer; border-radius: 8px; border: none; background: #fff; color: #000; margin-top: 20px;">Play Again</button>
+    </div>
+  </div>
+  <div id="app">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+</body>
+</html>
