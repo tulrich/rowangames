@@ -88,8 +88,12 @@ export function movePlayer(state, keys) {
   let moveX = 0;
   let moveY = 0;
   if (mag > 0) {
-    moveX = (dx / mag) * state.player.speed;
-    moveY = (dy / mag) * state.player.speed;
+    let currentSpeed = state.player.speed;
+    if (state.buildings.some(b => isPlayerInBuilding(state.player, b))) {
+      currentSpeed *= 0.4; // Slow down to 40% speed when indoors
+    }
+    moveX = (dx / mag) * currentSpeed;
+    moveY = (dy / mag) * currentSpeed;
   }
 
   // Provisional new position
